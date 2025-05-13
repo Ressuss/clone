@@ -1,0 +1,121 @@
+
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="UTF-8" />
+    <title>Jutsu - Chroma Key com Fundo Naruto</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.4.0/p5.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.4.0/addons/p5.dom.min.js"></script>
+    <style> html, body { margin: 0; padding: 0; overflow: hidden; background: black; } </style>
+  </head>
+  <body>
+    <main>
+      <script>
+let capture;
+let frameBuffer = [];
+let bufferLength = 30;
+let numClones = 6;
+let triggered = false;
+let bgImage;
+let greenThreshold = 60;
+
+function preload() {
+  bgImage = loadImage('https://upload.wikimedia.org/wikipedia/commons/thumb/6/66/Naruto_Uzumaki.png/640px-Naruto_Uzumaki.png'); // exemplo de fundo Naruto
+}
+
+function setup() {
+  createCanvas(windowWidth, windowHeight);
+  capture = createCapture(VIDEO);
+  capture.size(640, 480);
+  capture.hide();
+  imageMode(CENTER);
+  rectMode(CENTER);
+  textAlign(CENTER, CENTER);
+}
+
+function draw() {
+  background(0);
+
+  image(bgImage, width / 2, height / 2, width, height); // fundo Naruto
+
+  if (!triggered) {
+    fill(255);
+    textSize(28);
+    text("Carrega na barra de espaço para ativar o jutsu!", width / 2, height / 2);
+    return;
+  }
+
+  frameBuffer.unshift(capture.get());
+  if (frameBuffer.length > bufferLength * (numClones + 1)) {
+    frameBuffer.pop();
+  }
+
+  let sectionWidth = width / numClones;
+  let sectionHeight = height;
+
+  for (let i = 0; i < numClones; i++) {
+    let delayIndex = bufferLength * i;
+    if (frameBuffer[delayIndex]) {
+      let frame = frameBuffer[delayIndex];
+      frame.loadPixels();
+
+      // aplicar chroma key ao frame (remover fundo verde)
+      for (let y = 0; y < frame.height; y++) {
+        for (let x = 0; x < frame.width; x++) {
+          let index = (x + y * frame.width) * 4;
+          let r = frame.pixels[index + 0];
+          let g = frame.pixels[index + 1];
+          let b = frame.pixels[index + 2];
+
+          if (g > 100 && r < 100 && b < 100 && g - max(r, b) > greenThreshold) {
+            frame.pixels[index + 3] = 0; // tornar transparente
+          }
+        }
+      }
+
+      frame.updatePixels();
+
+      let x = sectionWidth * i + sectionWidth / 2;
+
+      push();
+      translate(x, height / 2);
+      let camAspect = capture.width / capture.height;
+      let targetAspect = sectionWidth / sectionHeight;
+
+      let sx, sy, sw, sh;
+
+      if (camAspect > targetAspect) {
+        sh = capture.height;
+        sw = sh * targetAspect;
+        sx = (capture.width - sw) / 2;
+        sy = 0;
+      } else {
+        sw = capture.width;
+        sh = sw / targetAspect;
+        sx = 0;
+        sy = (capture.height - sh) / 2;
+      }
+
+      image(frame, 0, 0, sectionWidth, sectionHeight, sx, sy, sw, sh);
+      pop();
+    }
+  }
+
+  fill(255);
+  textSize(24);
+  text("Jutsu da Replicação com Fundo Naruto", width / 2, 40);
+}
+
+function keyPressed() {
+  if (key === ' ') {
+    triggered = true;
+  }
+}
+
+function windowResized() {
+  resizeCanvas(windowWidth, windowHeight);
+}
+</script>
+    </main>
+  </body>
+</html>
