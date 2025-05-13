@@ -3,34 +3,52 @@
 <html>
   <head>
     <meta charset="UTF-8" />
-    <title>Jutsu - Chroma Key com Fundo Naruto</title>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.4.0/p5.js"></script>
+    <title>Jutsu - Remoção de Fundo com IA</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.4.0/p5.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.4.0/addons/p5.dom.min.js"></script>
-    <style> html, body { margin: 0; padding: 0; overflow: hidden; background: black; } </style>
+    <script src="https://unpkg.com/ml5@0.6.0/dist/ml5.min.js"></script>
+    <style>html, body { margin: 0; padding: 0; overflow: hidden; background: black; }</style>
   </head>
   <body>
     <main>
       <script>
-let capture;
+let video;
+let bodypix;
+let segmentation;
 let frameBuffer = [];
 let bufferLength = 30;
 let numClones = 6;
 let triggered = false;
 let bgImage;
-let greenThreshold = 60;
 
 function preload() {
-  bgImage = loadImage('https://upload.wikimedia.org/wikipedia/commons/thumb/6/66/Naruto_Uzumaki.png/640px-Naruto_Uzumaki.png'); // exemplo de fundo Naruto
+  bgImage = loadImage('https://upload.wikimedia.org/wikipedia/commons/thumb/6/66/Naruto_Uzumaki.png/640px-Naruto_Uzumaki.png');
 }
 
 function setup() {
   createCanvas(windowWidth, windowHeight);
-  capture = createCapture(VIDEO);
-  capture.size(640, 480);
-  capture.hide();
+  video = createCapture(VIDEO);
+  video.size(640, 480);
+  video.hide();
   imageMode(CENTER);
   rectMode(CENTER);
   textAlign(CENTER, CENTER);
+
+  bodypix = ml5.bodyPix(video, {outputStride: 16, segmentationThreshold: 0.5}, modelReady);
+}
+
+function modelReady() {
+  console.log('BodyPix model ready!');
+  bodypix.segmentWithParts(gotResults);
+}
+
+function gotResults(err, result) {
+  if (err) {
+    console.error(err);
+    return;
+  }
+  segmentation = result;
+  bodypix.segmentWithParts(gotResults); // loop
 }
 
 function draw() {
@@ -45,7 +63,21 @@ function draw() {
     return;
   }
 
-  frameBuffer.unshift(capture.get());
+  if (segmentation && segmentation.maskBackground) {
+    let masked = createImage(video.width, video.height);
+    masked.loadPixels();
+    video.loadPixels();
+    for (let i = 0; i < video.pixels.length; i += 4) {
+      let alpha = segmentation.maskBackground.pixels[i] < 128 ? 255 : 0;
+      masked.pixels[i + 0] = video.pixels[i + 0];
+      masked.pixels[i + 1] = video.pixels[i + 1];
+      masked.pixels[i + 2] = video.pixels[i + 2];
+      masked.pixels[i + 3] = alpha;
+    }
+    masked.updatePixels();
+    frameBuffer.unshift(masked);
+  }
+
   if (frameBuffer.length > bufferLength * (numClones + 1)) {
     frameBuffer.pop();
   }
@@ -56,54 +88,17 @@ function draw() {
   for (let i = 0; i < numClones; i++) {
     let delayIndex = bufferLength * i;
     if (frameBuffer[delayIndex]) {
-      let frame = frameBuffer[delayIndex];
-      frame.loadPixels();
-
-      // aplicar chroma key ao frame (remover fundo verde)
-      for (let y = 0; y < frame.height; y++) {
-        for (let x = 0; x < frame.width; x++) {
-          let index = (x + y * frame.width) * 4;
-          let r = frame.pixels[index + 0];
-          let g = frame.pixels[index + 1];
-          let b = frame.pixels[index + 2];
-
-          if (g > 100 && r < 100 && b < 100 && g - max(r, b) > greenThreshold) {
-            frame.pixels[index + 3] = 0; // tornar transparente
-          }
-        }
-      }
-
-      frame.updatePixels();
-
       let x = sectionWidth * i + sectionWidth / 2;
-
       push();
       translate(x, height / 2);
-      let camAspect = capture.width / capture.height;
-      let targetAspect = sectionWidth / sectionHeight;
-
-      let sx, sy, sw, sh;
-
-      if (camAspect > targetAspect) {
-        sh = capture.height;
-        sw = sh * targetAspect;
-        sx = (capture.width - sw) / 2;
-        sy = 0;
-      } else {
-        sw = capture.width;
-        sh = sw / targetAspect;
-        sx = 0;
-        sy = (capture.height - sh) / 2;
-      }
-
-      image(frame, 0, 0, sectionWidth, sectionHeight, sx, sy, sw, sh);
+      image(frameBuffer[delayIndex], 0, 0, sectionWidth, sectionHeight);
       pop();
     }
   }
 
   fill(255);
-  textSize(24);
-  text("Jutsu da Replicação com Fundo Naruto", width / 2, 40);
+  textSize(22);
+  text("Jutsu da Replicação com IA (sem fundo verde)", width / 2, 40);
 }
 
 function keyPressed() {
